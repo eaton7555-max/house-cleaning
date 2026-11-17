@@ -154,7 +154,7 @@
         freq: "Frequency", once: "One-time (full price)", week: "Weekly (15% off)", bi: "Bi-weekly (10% off)", month: "Monthly (5% off)",
         eco: "Eco-friendly / non-toxic chemicals (+15%)", tax: "Tax %", extraDisc: "Extra discount %",
         notes: "Notes (gate code, pets, preferences, parking…)", save: "Save Job", clear: "Clear Phone Jobs",
-        viewInvoice: "View Invoice", accept: "Accept", start: "Start Work", invoice: "Raise Invoice", paid: "Mark Paid",
+        viewInvoice: "View Invoice", emailInvoice: "Email Invoice", accept: "Accept", start: "Start Work", invoice: "Raise Invoice", paid: "Mark Paid",
         noCrew: "No crew", noItems: "No items", notesPrefix: "Notes: ",
         needRoom: "Need a customer and at least one room with a price", needSqft: "Need a customer and square footage", needCustom: "Enter a custom rate",
         bizSaved: "Business info saved.", clearConfirm: "Clear all jobs from this phone?", cleared: "Phone jobs cleared.",
@@ -173,7 +173,7 @@
         freq: "Frecuencia", once: "Una vez (precio completo)", week: "Semanal (15% descuento)", bi: "Quincenal (10% descuento)", month: "Mensual (5% descuento)",
         eco: "Químicos ecológicos / sin tóxicos (+15%)", tax: "Impuesto %", extraDisc: "Descuento extra %",
         notes: "Notas (código de portón, mascotas, preferencias, estacionamiento…)", save: "Guardar trabajo", clear: "Borrar trabajos del teléfono",
-        viewInvoice: "Ver factura", accept: "Aceptar", start: "Comenzar trabajo", invoice: "Generar factura", paid: "Marcar pagado",
+        viewInvoice: "Ver factura", emailInvoice: "Enviar factura", accept: "Aceptar", start: "Comenzar trabajo", invoice: "Generar factura", paid: "Marcar pagado",
         noCrew: "Sin equipo", noItems: "Sin artículos", notesPrefix: "Notas: ",
         needRoom: "Se necesita un cliente y al menos una habitación con precio", needSqft: "Se necesita un cliente y pies cuadrados", needCustom: "Ingrese una tarifa personalizada",
         bizSaved: "Información guardada.", clearConfirm: "¿Borrar todos los trabajos de este teléfono?", cleared: "Trabajos del teléfono borrados.",
@@ -320,6 +320,22 @@
       }
     }
 
+    function emailInvoice(job) {
+      if (!job.email) return alert(lang === "es" ? "No hay correo del cliente" : "No client email on this job");
+      const c = calc(job);
+      const biz = loadBiz();
+      const subject = encodeURIComponent((lang === "es" ? "Factura " : "Invoice ") + (job.invoiceNum || "") + " - " + (biz.name || "House Cleaning"));
+      const body = encodeURIComponent(
+        (lang === "es" ? "Hola " : "Hello ") + job.client + ",\n\n" +
+        (lang === "es" ? "Adjunto su factura." : "Please find your invoice below.") + "\n\n" +
+        "Invoice #" + (job.invoiceNum || "—") + "\n" +
+        "Total: " + money(c.total) + "\n" +
+        (job.notes ? "Notes: " + job.notes + "\n" : "") +
+        "\nThank you!\n" + (biz.name || "")
+      );
+      window.location.href = "mailto:" + job.email + "?subject=" + subject + "&body=" + body;
+    }
+
     function makeInvoice(job) {
       const c = calc(job);
       const biz = loadBiz();
@@ -375,6 +391,7 @@
         const div = document.createElement("div");
         div.className = "job";
         let actions = `<button data-id="${job.id}" data-action="pdf">${tr("viewInvoice")}</button>`;
+        if (job.email) actions += `<button data-id="${job.id}" data-action="email">${tr("emailInvoice")}</button>`;
         if (job.status === "quote") actions += `<button data-id="${job.id}" data-action="accept">${tr("accept")}</button>`;
         if (job.status === "accepted") actions += `<button data-id="${job.id}" data-action="start">${tr("start")}</button>`;
         if (job.status === "wip") actions += `<button data-id="${job.id}" data-action="invoice">${tr("invoice")}</button>`;
@@ -407,6 +424,7 @@
       const job = jobs.find(j => j.id === id);
       if (!job) return;
       if (act === "pdf") { makeInvoice(job); return; }
+      if (act === "email") { emailInvoice(job); return; }
       if (act === "accept") job.status = "accepted";
       else if (act === "start") job.status = "wip";
       else if (act === "invoice") { job.status = "invoiced"; job.invoiceDate = Date.now(); if (!job.invoiceNum) job.invoiceNum = nextInvoiceNum(); }
