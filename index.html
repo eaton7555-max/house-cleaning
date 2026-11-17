@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>House Cleaning</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0ea5e9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cleaning">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0c1a24;
+      color: #f8fafc;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .summary { display: flex; gap: 10px; margin-bottom: 12px; font-size: 0.85rem; flex-wrap: wrap; }
+    .summary div { background: #142833; padding: 10px 12px; border-radius: 12px; flex: 1; min-width: 120px; }
+    .summary .label { color: #7dd3fc; font-size: 0.7rem; }
+    .add-form, .job, .biz-form {
+      background: #142833;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    input, select, button, textarea {
+      font-family: inherit;
+      font-size: 1rem;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    input, select, textarea { background: #0c1a24; color: white; }
+    textarea { min-height: 60px; resize: vertical; }
+    button.add, button.line, button.clear, button.save-biz {
+      background: #0ea5e9;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      width: auto;
+      padding: 10px 16px;
+    }
+    button.line { font-size: 0.85rem; margin-bottom: 12px; }
+    button.clear { background: #7f1d1d; margin-top: 8px; }
+    button.save-biz { margin-top: 4px; }
+    .line-item { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+    .line-item select, .line-item input { margin: 0; flex: 1; }
+    .line-item .qty { max-width: 70px; }
+    .line-item .price { max-width: 90px; }
+    .job .top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .job .client { font-weight: 600; }
+    .job .amount { color: #7dd3fc; font-weight: 600; }
+    .job .meta { font-size: 0.8rem; color: #94a3b8; margin-top: 4px; }
+    .job .actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .job button { width: auto; padding: 6px 12px; font-size: 0.85rem; background: #0ea5e9; color: white; }
+    .lines { font-size: 0.8rem; color: #cbd5e1; margin-top: 6px; }
+    .status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: #1e3a4a; }
+    .row { display: flex; gap: 8px; }
+    .row input, .row select { flex: 1; }
+    label { display: block; font-size: 0.85rem; color: #7dd3fc; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>House Cleaning</h1>
+  <div class="summary">
+    <div><div class="label">Received</div><div id="received">$0</div></div>
+    <div><div class="label">Pending</div><div id="pending">$0</div></div>
+    <div><div class="label">Jobs</div><div id="jobCount">0</div></div>
+  </div>
+
+  <div class="biz-form">
+    <div style="font-size:0.85rem; margin-bottom:8px; color:#7dd3fc;">Your Business Info (appears on invoices)</div>
+    <input id="bizName" placeholder="Business name" />
+    <input id="bizAddress" placeholder="Business address" />
+    <input id="bizPhone" placeholder="Business phone" />
+    <div class="row">
+      <input id="paymentTerms" type="number" placeholder="Payment terms (days)" value="14" />
+      <input id="discountDefault" type="number" step="0.01" placeholder="Default discount %" value="0" />
+    </div>
+    <button class="save-biz" id="saveBiz">Save Business Info</button>
+  </div>
+
+  <div class="add-form">
+    <input id="client" placeholder="Customer name" />
+    <input id="address" placeholder="Customer address" />
+    <input id="phone" placeholder="Phone (optional)" />
+    <input id="email" placeholder="Email (optional)" />
+    <input id="crew" placeholder="Cleaner / Crew name" />
+
+    <label>Pricing Method</label>
+    <select id="pricingMethod">
+      <option value="rooms">By Room Type</option>
+      <option value="sqft">By Square Footage</option>
+    </select>
+
+    <div id="roomsSection">
+      <div id="lines"></div>
+      <button class="line" type="button" id="addLine">+ Add Room</button>
+    </div>
+
+    <div id="sqftSection" style="display:none;">
+      <input id="sqft" type="number" placeholder="Total square footage" />
+      <div class="row">
+        <select id="rateType">
+          <option value="0.12">Standard ($0.12/sqft)</option>
+          <option value="0.18">Deep Clean ($0.18/sqft)</option>
+          <option value="custom">Custom rate</option>
+        </select>
+        <input id="customRate" type="number" step="0.01" placeholder="Custom $/sqft" style="display:none;" />
+      </div>
+    </div>
+
+    <label>Service Level</label>
+    <select id="serviceLevel">
+      <option value="maintenance">Maintenance Clean</option>
+      <option value="deep">Deep Clean</option>
+      <option value="moveout">Move-in / Move-out</option>
+      <option value="postcon">Post-construction</option>
+    </select>
+
+    <label>Frequency</label>
+    <select id="frequency">
+      <option value="0">One-time (full price)</option>
+      <option value="15">Weekly (15% off)</option>
+      <option value="10">Bi-weekly (10% off)</option>
+      <option value="5">Monthly (5% off)</option>
+    </select>
+
+    <label><input type="checkbox" id="ecoUpcharge" /> Eco-friendly / non-toxic chemicals (+15%)</label>
+
+    <div class="row">
+      <input id="countyTax" type="number" step="0.01" placeholder="Tax %" value="0" />
+      <input id="discount" type="number" step="0.01" placeholder="Extra discount %" value="0" />
+    </div>
+    <textarea id="notes" placeholder="Notes (gate code, pets, preferences, parking…)"></textarea>
+    <button class="add" id="save">Save Job</button>
+  </div>
+
+  <button class="clear" id="clearBtn">Clear Phone Jobs</button>
+
+  <div id="list"></div>
+
+  <script>
+    const { jsPDF } = window.jspdf;
+    const ROOM_SERVICES = [
+      "Bedroom", "Bathroom", "Kitchen", "Living Room", "Dining Room",
+      "Office / Den", "Laundry Room", "Entry / Hall", "Other"
+    ];
+    const KEY = "cleaning-jobs-v1";
+    const BIZ_KEY = "cleaning-biz-v1";
+
+    const STATUS_LABELS = {
+      quote: "Quoted",
+      accepted: "Accepted",
+      wip: "Work in Progress",
+      invoiced: "Invoiced",
+      paid: "Paid"
+    };
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY)) || []; }
+      catch { return []; }
+    }
+    function save(items) {
+      localStorage.setItem(KEY, JSON.stringify(items));
+    }
+    function loadBiz() {
+      try { return JSON.parse(localStorage.getItem(BIZ_KEY)) || { paymentTerms: 14, discountDefault: 0 }; }
+      catch { return { paymentTerms: 14, discountDefault: 0 }; }
+    }
+    function saveBiz(biz) {
+      localStorage.setItem(BIZ_KEY, JSON.stringify(biz));
+    }
+
+    function money(n) {
+      return "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function nextInvoiceNum() {
+      const jobs = load();
+      const nums = jobs.map(j => j.invoiceNum || 0);
+      return Math.max(1000, ...nums) + 1;
+    }
+
+    function addLineRow(service = "Bedroom", qty = 1, price = "") {
+      const div = document.createElement("div");
+      div.className = "line-item";
+      div.innerHTML = `
+        <select class="svc">${ROOM_SERVICES.map(s => `<option ${s===service?"selected":""}>${s}</option>`).join("")}</select>
+        <input class="qty" type="number" step="1" min="1" value="${qty}" placeholder="Qty" />
+        <input class="price" type="number" step="0.01" value="${price}" placeholder="$" />
+      `;
+      document.getElementById("lines").appendChild(div);
+    }
+
+    function getLines() {
+      return Array.from(document.querySelectorAll(".line-item")).map(row => ({
+        service: row.querySelector(".svc").value,
+        qty: parseFloat(row.querySelector(".qty").value) || 1,
+        price: parseFloat(row.querySelector(".price").value) || 0
+      })).filter(l => l.price > 0);
+    }
+
+    function calc(job) {
+      let subtotal = 0;
+      if (job.pricingMethod === "sqft") {
+        const rate = job.rateType === "custom" ? (job.customRate || 0) : parseFloat(job.rateType || 0);
+        subtotal = (job.sqft || 0) * rate;
+      } else {
+        subtotal = (job.lines || []).reduce((sum, l) => sum + (l.qty * l.price), 0);
+      }
+      const freqDiscount = subtotal * ((job.frequency || 0) / 100);
+      const extraDiscount = (subtotal - freqDiscount) * ((job.discount || 0) / 100);
+      const afterDiscount = subtotal - freqDiscount - extraDiscount;
+      let eco = 0;
+      if (job.ecoUpcharge) eco = afterDiscount * 0.15;
+      const afterEco = afterDiscount + eco;
+      const tax = afterEco * ((job.countyTax || 0) / 100);
+      return { subtotal, freqDiscount, extraDiscount, eco, afterEco, tax, total: afterEco + tax };
+    }
+
+    function dueDate(job) {
+      const biz = loadBiz();
+      const days = biz.paymentTerms || 14;
+      const d = new Date(job.created);
+      d.setDate(d.getDate() + days);
+      return d.toLocaleDateString();
+    }
+
+    function makeInvoice(job) {
+      const c = calc(job);
+      const biz = loadBiz();
+      const doc = new jsPDF();
+      const date = new Date(job.created).toLocaleDateString();
+      const invNum = job.invoiceNum || "—";
+      const due = dueDate(job);
+
+      doc.setFontSize(18);
+      doc.text(biz.name || "House Cleaning Services", 20, 22);
+      doc.setFontSize(10);
+      if (biz.address) doc.text(biz.address, 20, 28);
+      if (biz.phone) doc.text(biz.phone, 20, 34);
+
+      doc.setFontSize(16);
+      doc.text("INVOICE", 140, 22);
+      doc.setFontSize(11);
+      doc.text(`#${invNum}`, 140, 30);
+      doc.text(`Date: ${date}`, 140, 36);
+      doc.text(`Due: ${due}`, 140, 42);
+
+      doc.setFontSize(11);
+      doc.text("Bill To:", 20, 56);
+      doc.setFontSize(12);
+      doc.text(job.client, 20, 63);
+      doc.setFontSize(10);
+      if (job.address) {
+        const addrLines = doc.splitTextToSize(job.address, 90);
+        doc.text(addrLines, 20, 69);
+      }
+      if (job.phone) doc.text(job.phone, 20, 84);
+      if (job.email) doc.text(job.email, 20, 90);
+
+      if (job.crew) {
+        doc.setFontSize(11);
+        doc.text(`Cleaner: ${job.crew}`, 120, 56);
+      }
+
+      let y = 105;
+      doc.setFontSize(11);
+      doc.text("Description", 20, y);
+      doc.text("Qty", 110, y);
+      doc.text("Price", 140, y);
+      doc.text("Amount", 170, y);
+      y += 5;
+      doc.setLineWidth(0.2);
+      doc.line(20, y, 190, y);
+      y += 8;
+
+      if (job.pricingMethod === "sqft") {
+        const rate = job.rateType === "custom" ? job.customRate : parseFloat(job.rateType);
+        doc.setFontSize(10);
+        doc.text(`Square footage clean (${job.sqft} sqft @ ${money(rate)})`, 20, y);
+        doc.text("1", 110, y);
+        doc.text(money(rate), 140, y);
+        doc.text(money(job.sqft * rate), 170, y);
+        y += 7;
+      } else {
+        (job.lines || []).forEach(line => {
+          const amt = line.qty * line.price;
+          doc.setFontSize(10);
+          doc.text(line.service, 20, y);
+          doc.text(String(line.qty), 110, y);
+          doc.text(money(line.price), 140, y);
+          doc.text(money(amt), 170, y);
+          y += 7;
+        });
+      }
+
+      y += 4;
+      doc.line(20, y, 190, y);
+      y += 10;
+      doc.setFontSize(11);
+      doc.text(`Subtotal: ${money(c.subtotal)}`, 130, y);
+      y += 7;
+      if (c.freqDiscount > 0) {
+        doc.text(`Frequency discount: -${money(c.freqDiscount)}`, 130, y);
+        y += 7;
+      }
+      if (c.extraDiscount > 0) {
+        doc.text(`Extra discount: -${money(c.extraDiscount)}`, 130, y);
+        y += 7;
+      }
+      if (c.eco > 0) {
+        doc.text(`Eco chemicals (+15%): +${money(c.eco)}`, 130, y);
+        y += 7;
+      }
+      if (job.countyTax > 0) {
+        doc.text(`Tax (${job.countyTax}%): ${money(c.tax)}`, 130, y);
+        y += 7;
+      }
+      doc.setFontSize(13);
+      doc.text(`Total Due: ${money(c.total)}`, 130, y);
+
+      y += 12;
+      doc.setFontSize(10);
+      doc.text(`Service: ${job.serviceLevel || "Maintenance"}`, 20, y);
+      y += 6;
+      doc.text(`Payment terms: Net ${biz.paymentTerms || 14} days`, 20, y);
+
+      if (job.notes) {
+        y += 10;
+        doc.text("Notes:", 20, y);
+        y += 6;
+        const split = doc.splitTextToSize(job.notes, 170);
+        doc.text(split, 20, y);
+      }
+
+      doc.setFontSize(9);
+      doc.text("Thank you for your business!", 20, 270);
+
+      doc.save(`Invoice-${invNum}-${job.client.replace(/\s+/g, "-")}.pdf`);
+    }
+
+    function render() {
+      const jobs = load();
+      let received = 0, pending = 0;
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      jobs.forEach(job => {
+        const c = calc(job);
+        if (job.status === "paid") received += c.total;
+        else if (job.status === "invoiced") pending += c.total;
+
+        const div = document.createElement("div");
+        div.className = "job";
+        let actions = `<button data-id="${job.id}" data-action="pdf">View Invoice</button>`;
+        if (job.status === "quote") actions += `<button data-id="${job.id}" data-action="accept">Accept</button>`;
+        if (job.status === "accepted") actions += `<button data-id="${job.id}" data-action="start">Start Work</button>`;
+        if (job.status === "wip") actions += `<button data-id="${job.id}" data-action="invoice">Raise Invoice</button>`;
+        if (job.status === "invoiced") actions += `<button data-id="${job.id}" data-action="paid">Mark Paid</button>`;
+
+        let linesText = "";
+        if (job.pricingMethod === "sqft") {
+          linesText = `${job.sqft} sqft @ ${job.rateType === "custom" ? money(job.customRate) : money(job.rateType)}/sqft`;
+        } else {
+          linesText = (job.lines || []).map(l => `${l.qty}× ${l.service} @ ${money(l.price)}`).join("<br>");
+        }
+        const label = STATUS_LABELS[job.status] || job.status;
+
+        div.innerHTML = `
+          <div class="top">
+            <div>
+              <div class="client">${job.client} <span class="status-badge">${label}</span></div>
+              <div class="meta">${job.crew || "No crew"} · ${job.serviceLevel || ""} ${job.ecoUpcharge ? "· Eco" : ""}</div>
+              ${job.address ? `<div class="meta">${job.address}</div>` : ""}
+              <div class="lines">${linesText || "No items"}</div>
+              ${job.notes ? `<div class="meta">Notes: ${job.notes}</div>` : ""}
+            </div>
+            <div class="amount">${money(c.total)}</div>
+          </div>
+          <div class="actions">${actions}</div>
+        `;
+        list.appendChild(div);
+      });
+
+      document.getElementById("received").textContent = money(received);
+      document.getElementById("pending").textContent = money(pending);
+      document.getElementById("jobCount").textContent = jobs.length;
+
+      list.querySelectorAll("button").forEach(btn => {
+        btn.onclick = () => action(btn.dataset.id, btn.dataset.action);
+      });
+    }
+
+    function action(id, act) {
+      const jobs = load();
+      const job = jobs.find(j => j.id === id);
+      if (!job) return;
+      if (act === "pdf") {
+        makeInvoice(job);
+        return;
+      }
+      if (act === "accept") job.status = "accepted";
+      else if (act === "start") job.status = "wip";
+      else if (act === "invoice") {
+        job.status = "invoiced";
+        job.invoiceDate = Date.now();
+        if (!job.invoiceNum) job.invoiceNum = nextInvoiceNum();
+      }
+      else if (act === "paid") job.status = "paid";
+      save(jobs);
+      render();
+    }
+
+    document.getElementById("pricingMethod").onchange = function() {
+      const isSqft = this.value === "sqft";
+      document.getElementById("roomsSection").style.display = isSqft ? "none" : "block";
+      document.getElementById("sqftSection").style.display = isSqft ? "block" : "none";
+    };
+
+    document.getElementById("rateType").onchange = function() {
+      document.getElementById("customRate").style.display = this.value === "custom" ? "block" : "none";
+    };
+
+    document.getElementById("addLine").onclick = () => addLineRow();
+    document.getElementById("save").onclick = () => {
+      const client = document.getElementById("client").value.trim();
+      const pricingMethod = document.getElementById("pricingMethod").value;
+      let lines = [];
+      let sqft = 0, rateType = "", customRate = 0;
+      if (pricingMethod === "rooms") {
+        lines = getLines();
+        if (!client || lines.length === 0) return alert("Need a customer and at least one room with a price");
+      } else {
+        sqft = parseFloat(document.getElementById("sqft").value) || 0;
+        rateType = document.getElementById("rateType").value;
+        customRate = parseFloat(document.getElementById("customRate").value) || 0;
+        if (!client || sqft <= 0) return alert("Need a customer and square footage");
+        if (rateType === "custom" && customRate <= 0) return alert("Enter a custom rate");
+      }
+      const jobs = load();
+      const job = {
+        id: Date.now().toString(),
+        invoiceNum: nextInvoiceNum(),
+        client,
+        address: document.getElementById("address").value.trim(),
+        phone: document.getElementById("phone").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        crew: document.getElementById("crew").value.trim(),
+        pricingMethod,
+        lines,
+        sqft,
+        rateType,
+        customRate,
+        serviceLevel: document.getElementById("serviceLevel").value,
+        frequency: parseFloat(document.getElementById("frequency").value) || 0,
+        ecoUpcharge: document.getElementById("ecoUpcharge").checked,
+        countyTax: parseFloat(document.getElementById("countyTax").value) || 0,
+        discount: parseFloat(document.getElementById("discount").value) || 0,
+        notes: document.getElementById("notes").value.trim(),
+        status: "quote",
+        created: Date.now()
+      };
+      jobs.push(job);
+      save(jobs);
+      document.getElementById("client").value = "";
+      document.getElementById("address").value = "";
+      document.getElementById("phone").value = "";
+      document.getElementById("email").value = "";
+      document.getElementById("crew").value = "";
+      document.getElementById("notes").value = "";
+      document.getElementById("discount").value = "0";
+      document.getElementById("lines").innerHTML = "";
+      document.getElementById("ecoUpcharge").checked = false;
+      addLineRow();
+      render();
+    };
+
+    document.getElementById("saveBiz").onclick = () => {
+      const biz = {
+        name: document.getElementById("bizName").value.trim(),
+        address: document.getElementById("bizAddress").value.trim(),
+        phone: document.getElementById("bizPhone").value.trim(),
+        paymentTerms: parseInt(document.getElementById("paymentTerms").value) || 14,
+        discountDefault: parseFloat(document.getElementById("discountDefault").value) || 0
+      };
+      saveBiz(biz);
+      alert("Business info saved.");
+    };
+
+    document.getElementById("clearBtn").onclick = () => {
+      if (confirm("Clear all jobs from this phone? ")) {
+        localStorage.removeItem(KEY);
+        render();
+        alert("Phone jobs cleared.");
+      }
+    };
+
+    const biz = loadBiz();
+    if (biz.name) document.getElementById("bizName").value = biz.name;
+    if (biz.address) document.getElementById("bizAddress").value = biz.address;
+    if (biz.phone) document.getElementById("bizPhone").value = biz.phone;
+    if (biz.paymentTerms) document.getElementById("paymentTerms").value = biz.paymentTerms;
+    if (biz.discountDefault) document.getElementById("discountDefault").value = biz.discountDefault;
+
+    addLineRow();
+    render();
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    }
+  </script>
+</body>
+</html>
