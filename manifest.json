@@ -1,0 +1,9 @@
+{
+  "name": "House Cleaning",
+  "short_name": "Cleaning",
+  "start_url": "https://eaton7555-max.github.io/house-cleaning/",
+  "scope": "https://eaton7555-max.github.io/house-cleaning/",
+  "display": "standalone",
+  "background_color": "#0c1a24",
+  "theme_color": "#0ea5e9"
+}
